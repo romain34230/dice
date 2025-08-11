@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dice</title>
+  <style>
+    :root{
+      --bg:#0f172a; /* slate-900 */
+      --panel:#111827; /* gray-900 */
+      --panel-2:#0b1220; /* dark */
+      --muted:#94a3b8; /* slate-400 */
+      --text:#e5e7eb; /* gray-200 */
+      --accent:#22d3ee; /* cyan-400 */
+      --accent-2:#60a5fa; /* blue-400 */
+      --ok:#34d399; /* green-400 */
+      --warn:#fbbf24; /* amber-400 */
+      --err:#f87171;  /* red-400 */
+      --shadow: 0 10px 30px rgba(0,0,0,.3);
+      --radius: 18px;
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      background: radial-gradient(1200px 800px at 20% 0%, #0b1220, #0f172a) fixed; color:var(--text);
+      display:flex; flex-direction:column; gap:16px; padding:16px;
+    }
+    header{
+      display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+    .title{font-size: clamp(18px, 3vw, 28px); font-weight:800; letter-spacing:.3px;}
+    .subtitle{font-size: clamp(12px, 2vw, 14px); color:var(--muted)}
+    .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    button, select, input[type="number"], input[type="text"]{
+      background:linear-gradient(180deg, #111827, #0b1220); color:var(--text); border:1px solid #1f2937; border-radius:12px; padding:10px 14px; cursor:pointer; box-shadow:var(--shadow);
+    }
+    button:hover{filter:brightness(1.1)}
+    button.primary{background:linear-gradient(180deg, #0ea5e9, #0284c7); border:none; color:white;}
+    button.ghost{background:transparent; border:1px dashed #1f2937;}
+    button.danger{background:linear-gradient(180deg, #ef4444, #b91c1c); border:none;}
+    .layout{display:grid; grid-template-columns: 380px 1fr; gap:16px;}
+    @media(max-width: 1000px){ .layout{grid-template-columns: 1fr;} }
+
+    /* Dice area */
+    .dice-area{background:linear-gradient(180deg, #0b1220, #0a1020); border:1px solid #1f2937; border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .dice-tray{display:flex; gap:12px; flex-wrap:wrap; margin-top:12px}
+    .die{width:64px; height:64px; border-radius:14px; display:grid; place-items:center; position:relative; transition:transform .12s ease, box-shadow .12s ease, filter .12s ease; user-select:none;}
+    .die-inner{width:56px; height:56px; background:#111827; border-radius:12px; border:1px solid #1f2937; display:grid; place-items:center; box-shadow: inset 0 6px 14px rgba(0,0,0,.6);}
+    .pip{width:10px; height:10px; background:#e5e7eb; border-radius:50%; box-shadow: 0 1px 0 rgba(0,0,0,.5)}
+    .die.held{outline:2px solid var(--accent); box-shadow:0 0 0 3px rgba(34,211,238,.25), var(--shadow); filter:saturate(1.2)}
+    .die:hover{transform:translateY(-2px)}
+    .die.roll{animation: wiggle .4s ease}
+    @keyframes wiggle { 0% {transform:rotate(0)} 20%{transform:rotate(8deg)} 60%{transform:rotate(-6deg)} 100%{transform:rotate(0)} }
+
+    .legend{color:var(--muted); font-size:12px}
+
+    /* Scoreboard */
+    .board{background:linear-gradient(180deg, #0b1220, #0a1020); border:1px solid #1f2937; border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); overflow:auto}
+    table{width:100%; border-collapse:separate; border-spacing:0 8px}
+    th, td{padding:10px 12px; text-align:left}
+    thead th{color:#cbd5e1; font-size:12px; text-transform:uppercase; letter-spacing:.08em}
+    tbody tr{background:#0f172a; border:1px solid #1f2937}
+    tbody tr td:first-child{border-top-left-radius:12px; border-bottom-left-radius:12px;}
+    tbody tr td:last-child{border-top-right-radius:12px; border-bottom-right-radius:12px;}
+    .cat{color:#e2e8f0}
+    .playable{cursor:pointer; position:relative}
+    .playable:hover{background:#0b1220}
+    .playable .hint{position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--muted)}
+    .disabled{opacity:.4; pointer-events:none}
+    .pill{display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px;}
+    .current{outline:2px solid var(--accent); box-shadow:0 0 0 3px rgba(34,211,238,.2);}
+    .winner{outline:2px solid var(--ok);}
+
+    .footer{display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top:10px}
+    .note{color:var(--muted); font-size:12px}
+
+    .sep{height:1px; background:#1f2937; margin:12px 0}
+
+    .tag{background:#0b1220; border:1px solid #1f2937; padding:4px 8px; border-radius:10px; font-size:12px; color:#cbd5e1}
+    .hidden{display:none!important}
+
+    .small{font-size:12px}
+    .big{font-size:18px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">🎲 Dice</div>
+      <div class="subtitle">Solo ou multijoueur (passe-et-joue). Lancez jusqu'à 3 fois, gardez des dés en cliquant, puis marquez une catégorie.</div>
+    </div>
+    <div class="controls">
+      <button id="newGame" class="primary">Nouvelle partie</button>
+      <button id="reset" class="ghost" title="Effacer l'état enregistré">Réinitialiser</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="dice-area">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <label for="mode">Mode:&nbsp;</label>
+          <select id="mode">
+            <option value="solo">Solo</option>
+            <option value="multi">Multijoueur</option>
+          </select>
+          <span id="playersConfig">
+            <label for="playerCount">&nbsp;Joueurs:</label>
+            <input id="playerCount" type="number" min="1" max="6" value="2" style="width:64px"/>
+            <span id="playerNames"></span>
+          </span>
+        </div>
+        <div class="tag">Tour: <span id="turnInfo">—</span></div>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="row">
+        <button id="roll" class="primary">Lancer (3)</button>
+        <button id="score" disabled>Marquer une catégorie…</button>
+        <span class="legend">Cliquez un dé pour le <b>garder/libérer</b>. Jusqu'à 3 lancers par tour.</span>
+      </div>
+
+      <div class="dice-tray" id="diceTray"></div>
+
+      <div class="footer">
+        <div class="note">Conseil: passez la souris sur une catégorie libre pour voir l'aperçu du score. Bonus de 35 pts si la somme des 1–6 ≥ 63.</div>
+        <div>
+          <span class="tag">Lancers restants: <span id="rollsLeft">3</span></span>
+          <span class="tag">Manche: <span id="roundInfo">1 / 13</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="board">
+      <table id="scoreTable"></table>
+    </section>
+  </div>
+
+  <template id="dieTemplate">
+    <div class="die" role="button" aria-label="Dé">
+      <div class="die-inner"></div>
+    </div>
+  </template>
+
+  <script>
+    /*
+      Yahtzee FR — Règles implémentées
+      - 5 dés, 3 lancers max par tour, possibilité de garder certains dés.
+      - 13 manches: 1,2,3,4,5,6, Brelan, Carré, Main pleine, Petite suite, Grande suite, Yahtzee, Chance.
+      - Bonus section haute: +35 si total des (1..6) >= 63.
+      - Multijoueur passe-et-joue: rotation des joueurs par manche.
+      - Fin de partie: après 13 manches, affichage du vainqueur.
+      - Sauvegarde dans localStorage (reprise possible).
+    */
+
+    const CATS_ORDER = [
+      'uns', 'deux', 'trois', 'quatre', 'cinq', 'six',
+      'brelan', 'carre', 'full', 'pSuite', 'gSuite', 'yahtzee', 'chance'
+    ];
+
+    const CAT_LABELS = {
+      uns: 'As (1)',
+      deux: 'Deux (2)',
+      trois: 'Trois (3)',
+      quatre: 'Quatre (4)',
+      cinq: 'Cinq (5)',
+      six: 'Six (6)',
+      brelan: 'Brelan (3 dés identiques)',
+      carre: 'Carré (4 dés identiques)',
+      full: 'Main pleine (25)',
+      pSuite: 'Petite suite (30)',
+      gSuite: 'Grande suite (40)',
+      yahtzee: 'Yahtzee (50)',
+      chance: 'Chance (total)'
+    };
+
+    const STORAGE_KEY = 'yahtzee_fr_state_v1';
+
+    const el = sel => document.querySelector(sel);
+    const els = sel => [...document.querySelectorAll(sel)];
+
+    const state = {
+      mode: 'solo',
+      players: [], // [{name, scores:{cat: number|null}, upperBonus:boolean, total:number}]
+      currentPlayer: 0,
+      round: 1, // 1..13
+      dice: [1,1,1,1,1],
+      held: [false,false,false,false,false],
+      rollsLeft: 3,
+      finished: false
+    };
+
+    // --- Utilitaires dés & scores ---
+    const rollDie = () => 1 + Math.floor(Math.random()*6);
+    function rollDice(){
+      // S'assurer qu'il y a toujours 5 dés
+      if(state.dice.length !== 5) state.dice = Array(5).fill(1);
+      if(state.held.length !== 5) state.held = Array(5).fill(false);
+      for(let i=0;i<5;i++){
+        if(!state.held[i]) state.dice[i] = rollDie();
+      }
+      animateRoll();
+      state.rollsLeft = Math.max(0, state.rollsLeft - 1);
+      save();
+      render();
+    }
+
+    function counts(){
+      const c = [0,0,0,0,0,0,0]; // index 1..6
+      state.dice.forEach(v => c[v]++);
+      return c;
+    }
+
+    function sumDice(){ return state.dice.reduce((a,b)=>a+b,0); }
+
+    function isStraight(len){
+      const unique = [...new Set(state.dice)].sort((a,b)=>a-b);
+      const seqs = [ [1,2,3,4], [2,3,4,5], [3,4,5,6] ];
+      if(len===5){
+        const s5 = [ [1,2,3,4,5], [2,3,4,5,6] ];
+        return s5.some(s => s.every(n => unique.includes(n)));
+      }
+      return seqs.some(s => s.every(n => unique.includes(n)));
+    }
+
+    function scoreFor(cat){
+      const cnt = counts();
+      switch(cat){
+        case 'uns': return cnt[1]*1;
+        case 'deux': return cnt[2]*2;
+        case 'trois': return cnt[3]*3;
+        case 'quatre': return cnt[4]*4;
+        case 'cinq': return cnt[5]*5;
+        case 'six': return cnt[6]*6;
+        case 'brelan': return (cnt.some(n=>n>=3) ? sumDice() : 0);
+        case 'carre': return (cnt.some(n=>n>=4) ? sumDice() : 0);
+        case 'full': return (cnt.some(n=>n===3) && cnt.some(n=>n===2)) ? 25 : 0;
+        case 'pSuite': return isStraight(4) ? 30 : 0;
+        case 'gSuite': return isStraight(5) ? 40 : 0;
+        case 'yahtzee': return cnt.some(n=>n===5) ? 50 : 0;
+        case 'chance': return sumDice();
+      }
+      return 0;
+    }
+
+    function upperSubtotal(scores){
+      return (scores.uns??0)+(scores.deux??0)+(scores.trois??0)+(scores.quatre??0)+(scores.cinq??0)+(scores.six??0);
+    }
+
+    function totalFor(p){
+      const s = p.scores;
+      let t = 0;
+      for(const k of CATS_ORDER) t += (s[k]??0);
+      const bonus = upperSubtotal(s) >= 63 ? 35 : 0;
+      return t + bonus;
+    }
+
+    // --- Rendu des dés ---
+    function pipPositions(val){
+      // 3x3 grid positions (1..9): 1 2 3 / 4 5 6 / 7 8 9
+      const map = {
+        1:[5], 2:[1,9], 3:[1,5,9], 4:[1,3,7,9], 5:[1,3,5,7,9], 6:[1,3,4,6,7,9]
+      };
+      return map[val];
+    }
+
+    function renderDice(){
+      const tray = el('#diceTray');
+      tray.innerHTML = '';
+      // S'assurer qu'il y a toujours 5 dés
+      if(state.dice.length !== 5) state.dice = Array(5).fill(1);
+      if(state.held.length !== 5) state.held = Array(5).fill(false);
+      state.dice.forEach((v, i) => {
+        const tpl = el('#dieTemplate').content.firstElementChild.cloneNode(true);
+        tpl.classList.toggle('held', state.held[i]);
+        tpl.onclick = () => {
+          if(state.rollsLeft===3) return; // can't hold before first roll
+          state.held[i] = !state.held[i];
+          save(); render();
+        };
+        tpl.onkeydown = (e)=>{ if(e.key==='Enter' || e.key===' '){ tpl.click(); } };
+        const inner = tpl.querySelector('.die-inner');
+        inner.innerHTML = '';
+        const positions = pipPositions(v);
+        // Create a 3x3 grid
+        inner.style.display='grid';
+        inner.style.gridTemplateColumns='repeat(3, 1fr)';
+        inner.style.gridTemplateRows='repeat(3, 1fr)';
+        for(let pos=1; pos<=9; pos++){
+          const cell = document.createElement('div');
+          cell.style.display='grid';
+          cell.style.placeItems='center';
+          if(positions.includes(pos)){
+            const dot = document.createElement('div');
+            dot.className='pip';
+            cell.appendChild(dot);
+          }
+          inner.appendChild(cell);
+        }
+        // animation flag
+        tpl.classList.add('roll'); setTimeout(()=>tpl.classList.remove('roll'), 450);
+        tray.appendChild(tpl);
+      });
+    }
+
+    // --- Rendu tableau de score ---
+    function ensurePlayers(){
+      if(state.players.length===0){
+        const count = state.mode==='solo' ? 1 : Math.min(6, Math.max(1, Number(el('#playerCount').value||2)));
+        // Récupérer les prénoms saisis
+        let names = [];
+        if(state.mode==='multi') {
+          names = Array.from(document.querySelectorAll('.player-name-input')).map(input => input.value.trim() || `Joueur ${input.dataset.idx}`);
+        }
+        state.players = Array.from({length: count}, (_,i)=>({
+          name: state.mode==='solo' ? 'Joueur' : (names[i] || `Joueur ${i+1}`),
+          scores: Object.fromEntries(CATS_ORDER.map(c=>[c, null]))
+        }));
+      }
+    }
+
+    function renderTable(){
+      ensurePlayers();
+      const table = el('#scoreTable');
+      const thead = `<thead><tr><th>Catégorie</th>${state.players.map((p,idx)=>`<th ${idx===state.currentPlayer&&!state.finished? 'class="current"':''}>${p.name}${idx===state.currentPlayer&&!state.finished? ' <span class="pill" style="background:var(--accent); color:#001">À vous</span>':''}</th>`).join('')}</tr></thead>`;
+
+      const tbodyRows = [];
+
+      function row(cat, label){
+        const tds = state.players.map((p, idx)=>{
+          const val = p.scores[cat];
+          const isTurn = idx===state.currentPlayer && !state.finished;
+          const taken = val!==null;
+          const preview = isTurn && !taken && state.rollsLeft<3 ? scoreFor(cat) : null;
+          const attrs = [isTurn && !taken ? 'class="playable"' : '', isTurn && !taken ? `data-cat="${cat}"` : ''].filter(Boolean).join(' ');
+          if(taken) return `<td ${attrs}><b>${val}</b></td>`;
+          if(isTurn) return `<td ${attrs}><span>${label} <span class="hint">(${preview ?? '—'})</span></span></td>`;
+          return `<td ${attrs}><span class="small" style="color:var(--muted)">—</span></td>`;
+        }).join('');
+        tbodyRows.push(`<tr><td class="cat">${label}</td>${tds}</tr>`);
+      }
+
+      CATS_ORDER.forEach(c=>row(c, CAT_LABELS[c]));
+
+      // Sous-totaux + bonus + total
+      const upper = state.players.map(p=>upperSubtotal(p.scores));
+      const bonus = state.players.map((_,i)=> upper[i] >= 63 ? 35 : 0);
+      const totals = state.players.map((p,i)=> totalFor(p));
+
+      function sumRow(label, arr){
+        tbodyRows.push(`<tr>${[`<td class="cat">${label}</td>`, ...arr.map(v=>`<td><b>${v}</b></td>`)].join('')}</tr>`);
+      }
+      sumRow('Sous-total (1–6)', upper);
+      sumRow('Bonus section haute (+35 si ≥63)', bonus);
+      sumRow('TOTAL', totals);
+
+      table.innerHTML = thead + '<tbody>' + tbodyRows.join('') + '</tbody>';
+
+      // click handlers for playable cells
+      els('.playable').forEach(cell=>{
+        cell.addEventListener('click', ()=>{
+          const cat = cell.getAttribute('data-cat');
+          playCategory(cat);
+        });
+      });
+
+      // Mark winner if finished
+      if(state.finished){
+        const max = Math.max(...totals);
+        const idx = totals.findIndex(t=>t===max);
+        const heads = table.querySelectorAll('thead th');
+        heads[idx+1]?.classList.add('winner');
+      }
+    }
+
+    // --- Jeu ---
+    function startNewGame(){
+      const mode = el('#mode').value;
+      state.mode = mode;
+      state.players = []; // force recreate
+      ensurePlayers();
+      state.currentPlayer = 0;
+      state.round = 1;
+      state.dice = [1,1,1,1,1];
+      state.held = [false,false,false,false,false];
+      state.rollsLeft = 3;
+      state.finished = false;
+      save();
+      render();
+    }
+
+    function playCategory(cat){
+      const p = state.players[state.currentPlayer];
+      if(p.scores[cat]!==null) return;
+      const sc = scoreFor(cat);
+      p.scores[cat] = sc;
+
+      // Tour suivant
+      nextTurn();
+      save();
+      render();
+    }
+
+    function nextTurn(){
+      // reset dice/held/rolls
+      state.dice = [1,1,1,1,1];
+      state.held = [false,false,false,false,false];
+      state.rollsLeft = 3;
+
+      // advance player
+      const lastRound = state.round>=13;
+      if(state.mode==='solo'){
+        if(lastRound){
+          state.finished = true; return;
+        } else {
+          state.round++;
+        }
+        return;
+      }
+      // multi
+      if(state.currentPlayer < state.players.length-1){
+        state.currentPlayer++;
+      } else {
+        if(lastRound){
+          state.finished = true; return;
+        }
+        state.currentPlayer = 0;
+        state.round++;
+      }
+    }
+
+    // --- Rendu global ---
+    function render(){
+      renderDice();
+      renderTable();
+      el('#rollsLeft').textContent = state.rollsLeft;
+      el('#roundInfo').textContent = `${state.round} / 13`;
+      el('#turnInfo').textContent = state.finished ? 'Partie terminée' : `${state.players[state.currentPlayer]?.name || ''}`;
+      el('#score').disabled = !(state.rollsLeft<3);
+      el('#playersConfig').classList.toggle('hidden', el('#mode').value!== 'multi');
+      el('#roll').textContent = `Lancer (${state.rollsLeft})`;
+      el('#roll').disabled = state.rollsLeft<=0 || state.finished;
+    }
+
+    function animateRoll(){
+      // visual cue already on each die via class
+    }
+
+    // --- Persistance ---
+    function save(){
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+    }
+    function load(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return false;
+        const data = JSON.parse(raw);
+        // shallow validation
+        if(!data || !Array.isArray(data.players)) return false;
+        Object.assign(state, data);
+        return true;
+      }catch(e){ return false; }
+    }
+
+    // --- Actions UI ---
+    el('#roll').addEventListener('click', ()=>{
+      if(state.rollsLeft<=0 || state.finished) return;
+      rollDice();
+    });
+
+    el('#score').addEventListener('click', ()=>{
+      if(state.rollsLeft===3) return alert('Lancez au moins une fois avant de marquer.');
+      alert('Cliquez une case de catégorie (en surbrillance) dans le tableau pour marquer votre score.');
+    });
+
+    el('#newGame').addEventListener('click', ()=>{
+      if(confirm('Démarrer une nouvelle partie ? L\'état actuel sera remplacé.')) startNewGame();
+    });
+
+    el('#reset').addEventListener('click', ()=>{
+      if(confirm('Effacer la sauvegarde et réinitialiser ?')){
+        localStorage.removeItem(STORAGE_KEY);
+        startNewGame();
+      }
+    });
+
+    el('#mode').addEventListener('change', ()=>{
+      startNewGame();
+    });
+
+    // Ajout du rendu des champs prénoms
+    function renderPlayerNamesInputs(){
+      const container = el('#playerNames');
+      if(el('#mode').value !== 'multi') { container.innerHTML = ''; return; }
+      const count = Math.min(6, Math.max(1, Number(el('#playerCount').value||2)));
+      let html = '';
+      for(let i=0; i<count; i++){
+        html += `<input type="text" class="player-name-input" data-idx="${i}" placeholder="Prénom joueur ${i+1}" style="width:110px; margin-left:6px; margin-bottom:4px;" />`;
+      }
+      container.innerHTML = html;
+    }
+
+    // Mettre à jour les inputs prénoms quand le nombre de joueurs ou le mode change
+    el('#playerCount').addEventListener('input', renderPlayerNamesInputs);
+    el('#mode').addEventListener('change', renderPlayerNamesInputs);
+    renderPlayerNamesInputs();
+
+    // Initialisation
+    if(!load()) startNewGame();
+    render();
+  </script>
+
+  <footer style="margin-top:32px; text-align:center; color:var(--muted); font-size:13px;">
+    &copy; <a href="https://linktr.ee/romain_leclaire" target="_blank" style="color:var(--accent); text-decoration:none; font-size:16px; font-weight:500;">@Romain Leclaire</a> <br><span style="display:block; height:18px;"></span>
+  </footer>
+</body>
+</html>
